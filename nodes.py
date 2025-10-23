@@ -22,6 +22,8 @@ class Qwen3_VQA:
             torch.cuda.is_available()
             and torch.cuda.get_device_capability(self.device)[0] >= 8
         )
+        self.current_model_id = None  # Track the current model id
+        self.current_quantization = None  # Track the current quantization
 
     @classmethod
     def INPUT_TYPES(s):
@@ -119,14 +121,27 @@ class Qwen3_VQA:
                 local_dir_use_symlinks=False,
             )
 
-        if self.processor is None:
-            # The default range for the number of visual tokens per image in the model is 4-16384. You can set min_pixels and max_pixels according to your needs, such as a token count range of 256-1280, to balance speed and memory usage.
+        # If model_id or quantization changed, reload processor and model
+        if (
+            self.current_model_id != model_id
+            or self.current_quantization != quantization
+            or self.processor is None
+            or self.model is None
+        ):
+            self.current_model_id = model_id
+            self.current_quantization = quantization
+            if self.processor is not None:
+                del self.processor
+                self.processor = None
+            if self.model is not None:
+                del self.model
+                self.model = None
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
             self.processor = AutoProcessor.from_pretrained(
                 self.model_checkpoint, min_pixels=min_pixels, max_pixels=max_pixels
             )
-
-        if self.model is None:
-            # Load the model on the available device(s)
             if quantization == "4bit":
                 quantization_config = BitsAndBytesConfig(
                     load_in_4bit=True,
@@ -181,7 +196,6 @@ class Qwen3_VQA:
                         ],
                     },
                 ]
-                # raise ValueError("Either image or video must be provided")
             else:
                 messages = [
                     {
@@ -225,6 +239,8 @@ class Qwen3_VQA:
                 del self.model  # release model memory
                 self.processor = None  # set processor to None
                 self.model = None  # set model to None
+                self.current_model_id = None
+                self.current_quantization = None
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()  # release GPU memory
                     torch.cuda.ipc_collect()
