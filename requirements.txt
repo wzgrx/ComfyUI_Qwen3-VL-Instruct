@@ -7,7 +7,7 @@ huggingface_hub
 accelerate
 optimum
 av
-transformers>=4.57.1
+transformers
 qwen-vl-utils
 opencv-python
 bitsandbytes
